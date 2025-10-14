@@ -1,70 +1,67 @@
-<<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-  <title>My AI Assistant</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>AI Reading Buddy</title>
   <style>
-    body { font-family: sans-serif; max-width: 800px; margin: 20px auto; }
-    #chat { height: 400px; border: 1px solid #ccc; padding: 10px; overflow-y: scroll; margin-bottom: 10px; }
-    #message { width: 70%; padding: 8px; }
-    button { padding: 8px 16px; }
-    .user { text-align: right; color: blue; }
-    .ai { text-align: left; color: green; }
+    :root { --bg:#0b1020; --card:#151c36; --text:#f7f8ff; --muted:#9fb0ff; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    .wrap { max-width: 720px; margin: 40px auto; padding: 16px; background: var(--card); border-radius: 16px; }
+    .chat { height: 60vh; overflow-y: auto; background: rgba(255,255,255,0.06); border-radius: 12px; padding: 12px; }
+    .bubble { padding: 10px 12px; border-radius: 12px; margin: 8px 0; max-width: 80%; line-height: 1.35; }
+    .user { background: #2e3a7f; margin-left: auto; }
+    .ai { background: #20305f; margin-right: auto; }
+    form { display: flex; gap: 8px; margin-top: 12px; }
+    input { flex: 1; padding: 12px; border-radius: 10px; border: none; outline: none; background: #101733; color: var(--text); }
+    button { padding: 12px 16px; border-radius: 10px; border: none; background: #4c63ff; color: white; cursor: pointer; }
   </style>
 </head>
 <body>
-  <h1>🗣️ Talk to AI</h1>
-  <div id="chat"></div>
-  <input type="text" id="message" placeholder="Type your message..." />
-  <button onclick="sendMessage()">Send</button>
-  <button onclick="startVoice()">🎤 Voice</button>
+  <div class="wrap">
+    <h2>AI Reading Buddy</h2>
+    <div id="chat" class="chat"></div>
+    <form id="f">
+      <input id="msg" type="text" placeholder="Type a message..." autocomplete="off" required />
+      <button>Send</button>
+    </form>
+  </div>
 
   <script>
-    async function sendMessage() {
-      const input = document.getElementById("message");
-      const message = input.value;
-      if (!message) return;
+    const chat = document.getElementById("chat");
+    const form = document.getElementById("f");
+    const msg = document.getElementById("msg");
 
-      // Add user message to chat
-      addMessage("user", message);
-      input.value = "";
-
-      // Call your Vercel Edge Function (see Step 2)
-      const res = await fetch("/api/ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message })
-      });
-      const data = await res.json();
-      addMessage("ai", data.reply);
-      speak(data.reply); // Optional: AI speaks reply
-    }
-
-    function addMessage(sender, text) {
-      const chat = document.getElementById("chat");
-      const div = document.createElement("div");
-      div.className = sender;
-      div.innerText = text;
-      chat.appendChild(div);
+    function bubble(text, who) {
+      const el = document.createElement("div");
+      el.className = `bubble ${who}`;
+      el.textContent = text;
+      chat.appendChild(el);
       chat.scrollTop = chat.scrollHeight;
+      return el;
     }
 
-    // Voice input (Chrome/Edge only)
-    function startVoice() {
-      const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-      recognition.lang = 'en-US';
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        document.getElementById("message").value = transcript;
-      };
-      recognition.start();
-    }
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const text = msg.value.trim();
+      if (!text) return;
+      bubble(text, "user");
+      msg.value = "";
+      const thinking = bubble("Thinking…", "ai");
 
-    // Optional: AI speaks reply
-    function speak(text) {
-      if ('speechSynthesis' in window) {
-        speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text })
+        });
+        const data = await res.json();
+        thinking.textContent = data.reply || data.error || "Error.";
+      } catch (err) {
+        thinking.textContent = "Network error.";
       }
-    }
+    });
   </script>
 </body>
 </html>
