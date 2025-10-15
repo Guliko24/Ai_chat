@@ -5,198 +5,65 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>AI Reading Buddy</title>
   <style>
-    :root { --bg:#0b1020; --card:#151c36; --text:#f7f8ff; --muted:#9fb0ff; --chip:#223168; }
+    :root { --bg:#0b1020; --card:#151c36; --text:#f7f8ff; --muted:#9fb0ff; }
     * { box-sizing: border-box; }
-    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
-
-    .wrap { max-width: 1100px; margin: 24px auto; padding: 16px; }
-    .bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 8px; }
-    .title { font-weight: 700; font-size: 18px; }
-    .btn { padding: 8px 12px; border-radius: 10px; border: none; background: #4c63ff; color: #fff; cursor: pointer; }
-    .btn.secondary { background: #2c386e; }
-    .btn:disabled { opacity: .6; cursor: not-allowed; }
-
-    .grid { display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
-    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
-
-    .card { background: var(--card); border-radius: 16px; padding: 16px; }
-
-    /* chat pane */
-    .chat { height: 60vh; min-height: 420px; overflow-y: auto; background: rgba(255,255,255,0.06); border-radius: 12px; padding: 12px; }
+    body { margin:0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    .wrap { max-width: 720px; margin: 40px auto; padding: 16px; background: var(--card); border-radius: 16px; }
+    .chat { height: 60vh; overflow-y: auto; background: rgba(255,255,255,0.06); border-radius: 12px; padding: 12px; }
     .bubble { padding: 10px 12px; border-radius: 12px; margin: 8px 0; max-width: 80%; line-height: 1.35; }
     .user { background: #2e3a7f; margin-left: auto; }
     .ai { background: #20305f; margin-right: auto; }
     form { display: flex; gap: 8px; margin-top: 12px; }
-    input[type="text"] { flex: 1; padding: 12px; border-radius: 10px; border: none; outline: none; background: #101733; color: var(--text); }
-
-    /* history pane */
-    .hist-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
-    .hist-list { height: 60vh; min-height: 420px; overflow-y:auto; background: rgba(255,255,255,0.06); border-radius: 12px; padding: 12px; }
-    .turn { background: var(--chip); border-radius: 10px; padding: 10px; margin-bottom: 8px; }
-    .turn h4 { margin: 0 0 6px 0; font-size: 12px; color: var(--muted); display:flex; justify-content:space-between; gap:8px; }
-    .turn p { margin: 0 0 6px 0; white-space: pre-wrap; }
-    .tiny { font-size: 11px; color: var(--muted); }
+    input { flex: 1; padding: 12px; border-radius: 10px; border: none; outline: none; background: #101733; color: var(--text); }
+    button { padding: 12px 16px; border-radius: 10px; border: none; background: #4c63ff; color: white; cursor: pointer; }
+    button:hover { filter: brightness(1.05); }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="bar">
-      <div class="title">AI Reading Buddy</div>
-      <div style="display:flex; gap:8px;">
-        <button id="toggleHistory" class="btn secondary" aria-expanded="true">Hide History</button>
-        <button id="clearHistory" class="btn secondary">Clear History</button>
-      </div>
-    </div>
-
-    <div class="grid">
-      <!-- Chat panel -->
-      <div class="card">
-        <div id="chat" class="chat" aria-live="polite"></div>
-        <form id="f">
-          <input id="msg" type="text" placeholder="Type a message..." autocomplete="off" required />
-          <button id="sendBtn" class="btn">Send</button>
-        </form>
-      </div>
-
-      <!-- History panel -->
-      <div id="historyPanel" class="card">
-        <div class="hist-header">
-          <div style="font-weight:700;">Chat History (last 10 turns)</div>
-          <div class="tiny" id="histCount"></div>
-        </div>
-        <div id="hist" class="hist-list"></div>
-      </div>
-    </div>
+    <h2>AI Reading Buddy</h2>
+    <div id="chat" class="chat"></div>
+    <form id="chatForm">
+      <input id="msg" type="text" placeholder="Type a message..." autocomplete="off" required />
+      <button>Send</button>
+    </form>
   </div>
 
   <script>
-    // --- simple chat + history (localStorage) ---
     const chat = document.getElementById("chat");
-    const form = document.getElementById("f");
+    const form = document.getElementById("chatForm");
     const msg = document.getElementById("msg");
-    const sendBtn = document.getElementById("sendBtn");
 
-    const histList = document.getElementById("hist");
-    const histCount = document.getElementById("histCount");
-    const historyPanel = document.getElementById("historyPanel");
-    const toggleHistoryBtn = document.getElementById("toggleHistory");
-    const clearHistoryBtn = document.getElementById("clearHistory");
-
-    const STORAGE_KEY = "ai-reading-buddy-history-v1";
-    let busy = false;
-
-    function loadHistory() {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        return raw ? JSON.parse(raw) : [];
-      } catch {
-        return [];
-      }
-    }
-
-    function saveHistory(history) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
-    }
-
-    function addToHistory(role, content) {
-      const now = new Date().toISOString();
-      const hist = loadHistory();
-      hist.push({ role, content, at: now });
-      // keep last 20 messages (10 turns)
-      const capped = hist.slice(-20);
-      saveHistory(capped);
-      renderHistory();
-    }
-
-    function renderHistory() {
-      const hist = loadHistory();
-      histCount.textContent = hist.length ? `${Math.ceil(hist.length/2)} turns` : "empty";
-      histList.innerHTML = "";
-      // render in turns: pair user+ai
-      for (let i = 0; i < hist.length; i += 2) {
-        const u = hist[i];
-        const a = hist[i+1];
-        const div = document.createElement("div");
-        div.className = "turn";
-        const when = (u?.at || a?.at || "").replace("T"," ").slice(0,16);
-        div.innerHTML = `
-          <h4><span>Turn ${Math.floor(i/2)+1}</span><span class="tiny">${when}</span></h4>
-          ${u ? `<p><b>You:</b> ${escapeHtml(u.content)}</p>` : ""}
-          ${a ? `<p><b>AI:</b> ${escapeHtml(a.content)}</p>` : ""}
-        `;
-        histList.appendChild(div);
-      }
-      histList.scrollTop = histList.scrollHeight;
-    }
-
-    function escapeHtml(s) {
-      return s.replace(/[&<>"']/g, c => ({'&':'&nbsp;&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    }
-
-    function bubble(text, who) {
+    function addBubble(text, who) {
       const el = document.createElement("div");
       el.className = `bubble ${who}`;
       el.textContent = text;
       chat.appendChild(el);
       chat.scrollTop = chat.scrollHeight;
-      return el;
     }
 
-    async function sendMessage(text) {
-      // UI: prevent double send
-      busy = true;
-      sendBtn.disabled = true;
-
-      // add user bubble + history
-      bubble(text, "user");
-      addToHistory("user", text);
-
-      const thinking = bubble("Thinking…", "ai");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const text = msg.value.trim();
+      if (!text) return;
+      addBubble(text, "user");
+      msg.value = "";
+      addBubble("Thinking…", "ai");
 
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {"Content-Type": "application/json"},
           body: JSON.stringify({ message: text })
         });
         const data = await res.json();
-        const reply = data.reply || data.error || "Error.";
-        thinking.textContent = reply;
-        addToHistory("assistant", reply);
+        const last = chat.querySelector(".bubble.ai:last-child");
+        last.textContent = data.reply || data.error || "Error.";
       } catch (err) {
-        thinking.textContent = "Network error.";
-        addToHistory("assistant", "Network error.");
-      } finally {
-        sendBtn.disabled = false;
-        busy = false;
+        const last = chat.querySelector(".bubble.ai:last-child");
+        last.textContent = "Network error.";
       }
-    }
-
-    // form handler
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
-      if (busy) return;
-      const text = msg.value.trim();
-      if (!text) return;
-      msg.value = "";
-      sendMessage(text);
     });
-
-    // history controls
-    toggleHistoryBtn.addEventListener("click", () => {
-      const hidden = historyPanel.style.display === "none";
-      historyPanel.style.display = hidden ? "block" : "none";
-      toggleHistoryBtn.textContent = hidden ? "Hide History" : "Show History";
-      toggleHistoryBtn.setAttribute("aria-expanded", String(hidden));
-    });
-
-    clearHistoryBtn.addEventListener("click", () => {
-      localStorage.removeItem(STORAGE_KEY);
-      renderHistory();
-    });
-
-    // init
-    renderHistory();
   </script>
 </body>
 </html>
