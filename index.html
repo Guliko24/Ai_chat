@@ -16,14 +16,13 @@
     form { display: flex; gap: 8px; margin-top: 12px; }
     input { flex: 1; padding: 12px; border-radius: 10px; border: none; outline: none; background: #101733; color: var(--text); }
     button { padding: 12px 16px; border-radius: 10px; border: none; background: #4c63ff; color: white; cursor: pointer; }
-    button:hover { filter: brightness(1.05); }
   </style>
 </head>
 <body>
   <div class="wrap">
     <h2>AI Reading Buddy</h2>
     <div id="chat" class="chat"></div>
-    <form id="chatForm">
+    <form id="f">
       <input id="msg" type="text" placeholder="Type a message..." autocomplete="off" required />
       <button>Send</button>
     </form>
@@ -31,37 +30,36 @@
 
   <script>
     const chat = document.getElementById("chat");
-    const form = document.getElementById("chatForm");
+    const form = document.getElementById("f");
     const msg = document.getElementById("msg");
 
-    function addBubble(text, who) {
+    function bubble(text, who) {
       const el = document.createElement("div");
       el.className = `bubble ${who}`;
       el.textContent = text;
       chat.appendChild(el);
       chat.scrollTop = chat.scrollHeight;
+      return el;
     }
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const text = msg.value.trim();
       if (!text) return;
-      addBubble(text, "user");
+      bubble(text, "user");
       msg.value = "";
-      addBubble("Thinking…", "ai");
+      const thinking = bubble("Thinking…", "ai");
 
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
-          headers: {"Content-Type": "application/json"},
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: text })
         });
         const data = await res.json();
-        const last = chat.querySelector(".bubble.ai:last-child");
-        last.textContent = data.reply || data.error || "Error.";
+        thinking.textContent = data.reply || data.error || "Error.";
       } catch (err) {
-        const last = chat.querySelector(".bubble.ai:last-child");
-        last.textContent = "Network error.";
+        thinking.textContent = "Network error.";
       }
     });
   </script>
